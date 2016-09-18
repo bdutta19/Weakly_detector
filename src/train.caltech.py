@@ -16,7 +16,7 @@ weight_decay_rate = 0.0005
 momentum = 0.9
 batch_size = 60
 
-dataset_path = '/media/storage3/Study/data/256_ObjectCategories'
+dataset_path = '//Users/bdutta/Source/dataset/256_ObjectCategories'
 
 caltech_path = '../data/caltech'
 trainset_path = '../data/caltech/train.pickle'
