@@ -16,7 +16,7 @@ weight_decay_rate = 0.0005
 momentum = 0.9
 batch_size = 60
 
-dataset_path = '//Users/bdutta/Source/dataset/256_ObjectCategories'
+dataset_path = '../dataset/256_ObjectCategories'
 
 caltech_path = '../data/caltech'
 trainset_path = '../data/caltech/train.pickle'
@@ -60,27 +60,37 @@ else:
     label_dict = pd.read_pickle( label_dict_path )
     n_labels = len(label_dict)
 
+
 learning_rate = tf.placeholder( tf.float32, [])
 images_tf = tf.placeholder( tf.float32, [None, 224, 224, 3], name="images")
 labels_tf = tf.placeholder( tf.int64, [None], name='labels')
 
-detector = Detector(weight_path, n_labels)
+with tf.device('/gpu:0'):
+   detector = Detector(weight_path, n_labels)
 
-p1,p2,p3,p4,conv5, conv6, gap, output = detector.inference(images_tf)
-loss_tf = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits( output, labels_tf ))
+   p1,p2,p3,p4,conv5, conv6, gap, output = detector.inference(images_tf)
+   loss_tf = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits( output, labels_tf ))
 
-weights_only = filter( lambda x: x.name.endswith('W:0'), tf.trainable_variables() )
-weight_decay = tf.reduce_sum(tf.pack([tf.nn.l2_loss(x) for x in weights_only])) * weight_decay_rate
-loss_tf += weight_decay
+   weights_only = filter( lambda x: x.name.endswith('W:0'), tf.trainable_variables() )
+   weight_decay = tf.reduce_sum(tf.pack([tf.nn.l2_loss(x) for x in weights_only])) * weight_decay_rate
+   loss_tf += weight_decay
 
-sess = tf.InteractiveSession()
+   optimizer = tf.train.MomentumOptimizer( learning_rate, momentum )
+   grads_and_vars = optimizer.compute_gradients( loss_tf )
+   grads_and_vars = map(lambda gv: (gv[0], gv[1]) if ('conv6' in gv[1].name or 'GAP' in gv[1].name) else (gv[0]*0.1, gv[1]), grads_and_vars)
+   #grads_and_vars = [(tf.clip_by_value(gv[0], -5., 5.), gv[1]) for gv in grads_and_vars]
+   train_op = optimizer.apply_gradients( grads_and_vars )
+
+
+#sess = tf.InteractiveSession()
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7, allow_growth=True)
+configproto=tf.ConfigProto(
+        allow_soft_placement=True,
+        log_device_placement=True,
+        gpu_options=gpu_options)
+sess = tf.Session(config=configproto)
 saver = tf.train.Saver( max_to_keep=50 )
 
-optimizer = tf.train.MomentumOptimizer( learning_rate, momentum )
-grads_and_vars = optimizer.compute_gradients( loss_tf )
-grads_and_vars = map(lambda gv: (gv[0], gv[1]) if ('conv6' in gv[1].name or 'GAP' in gv[1].name) else (gv[0]*0.1, gv[1]), grads_and_vars)
-#grads_and_vars = [(tf.clip_by_value(gv[0], -5., 5.), gv[1]) for gv in grads_and_vars]
-train_op = optimizer.apply_gradients( grads_and_vars )
 tf.initialize_all_variables().run()
 
 if pretrained_model_path:
